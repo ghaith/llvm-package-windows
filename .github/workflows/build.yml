@@ -1,5 +1,3 @@
-# This is a basic workflow to help you get started with Actions
-
 name: Build
 
 # Controls when the workflow will run
@@ -21,18 +19,32 @@ jobs:
     runs-on: windows-latest
     env:
       llvm_version: 14.0.6
+    strategy:
+      fail-fast: true
+      matrix:
+        config: 
+          - {
+            version: "17",
+            year: "2022",
+            name: "msvc17"
+          }
+          - {
+            version: "16",
+            year: "2019",
+            name: "msvc16",
+          }
     
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       
       - name: Get CMake
         uses: lukka/get-cmake@latest
       
       - name: Checkout llvm
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: llvm/llvm-project
           ref: "llvmorg-${{ env.llvm_version }}"
@@ -47,20 +59,43 @@ jobs:
           cmake `
             -S ".\llvm\llvm" `
             -B ".\build" `
-            -G "Visual Studio 17 2022" `
+            -G "Visual Studio ${{ matrix.config.version }} ${{ matrix.config.year }}" `
             -Thost=x64 `
             -A x64 `
             -DLLVM_ENABLE_PROJECTS="lld;clang" `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_INSTALL_PREFIX=".\install"
           cmake --build .\build --target INSTALL --config Release -j
-          7z a -mx9 "LLVM-${{ env.llvm_version }}-win64.7z" ".\install\*"
+          7z a -mx9 "LLVM-${{ env.llvm_version }}-win64-${{ matrix.config.name }}.7z" ".\install\*"
 
       
       - name: Upload artifacts
-        uses: actions/upload-artifact@v2.2.4
+        uses: actions/upload-artifact@v3
+        with:
+          name: LLVM-${{ env.llvm_version }}-win64-${{ matrix.config.name }}
+          path: LLVM-${{ env.llvm_version }}-win64-${{ matrix.config.name }}.7z
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      llvm_version: 14.0.6
+      default: msvc17
+    steps:
+      - name: Dowload the default package
+        uses: actions/dowload-artifact@v3
+        with:
+          name: LLVM-${{ env.llvm_version }}-win64-${{ env.default }}
+      - shell: bash
+        run: |
+          mv LLVM-${{ env.llvm_version }}-win64-${{ env.default }}.7z ${{ env.llvm_version }}-win64.7z
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
         with:
           name: LLVM-${{ env.llvm_version }}-win64
           path: LLVM-${{ env.llvm_version }}-win64.7z
+
+
         
 
